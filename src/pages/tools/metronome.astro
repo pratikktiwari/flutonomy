@@ -1,0 +1,12 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/ui/PageHeader.astro';
+import Metronome from '../../components/tools/Metronome.astro';
+---
+
+<BaseLayout title="Metronome" description="A steady pulse with accented first beats, subdivisions and tap tempo.">
+  <div class="container">
+    <PageHeader eyebrow="Tool" title="Metronome" lead="A steady pulse with accented first beats, subdivisions and tap tempo." />
+    <Metronome />
+  </div>
+</BaseLayout>

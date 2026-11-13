@@ -1,0 +1,31 @@
+---
+/** Big round play/stop toggle shared by all transport-style tools. */
+import Icon from './Icon.astro';
+interface Props {
+  ref?: string;
+  label?: string;
+  size?: 'md' | 'lg';
+}
+const { ref = 'play', label = 'Play', size = 'lg' } = Astro.props;
+---
+
+<button type="button" class:list={['btn btn--primary play-btn', size === 'lg' && 'btn--round']} data-ref={ref} aria-pressed="false" aria-label={label}>
+  <Icon name="play" class="play-btn__play" size={22} />
+  <Icon name="stop" class="play-btn__stop" size={20} />
+  {size !== 'lg' && <span class="play-btn__text">{label}</span>}
+</button>
+
+<style>
+  .play-btn :global(.play-btn__stop) {
+    display: none;
+  }
+  .play-btn[aria-pressed='true'] :global(.play-btn__stop) {
+    display: block;
+  }
+  .play-btn[aria-pressed='true'] :global(.play-btn__play) {
+    display: none;
+  }
+  .play-btn :global(.play-btn__play) {
+    margin-left: 2px;
+  }
+</style>

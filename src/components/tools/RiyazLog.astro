@@ -1,0 +1,163 @@
+---
+import ToolCard from '../ui/ToolCard.astro';
+import PlayButton from '../ui/PlayButton.astro';
+---
+
+<ToolCard title="Riyaz Log" hindi="रियाज़" icon="timer" description="Time today's practice. Your streak and last two weeks stay on this device.">
+  <div class="riyaz" data-tool="riyaz">
+    <div class="riyaz__clock">
+      <span class="riyaz__time" data-ref="time">00:00</span>
+      <span class="muted riyaz__sub" data-ref="today">0 min today</span>
+      <div class="cluster">
+        <PlayButton label="Start session" />
+        <span class="chip chip--accent" data-ref="streak">0-day streak</span>
+      </div>
+    </div>
+    <div class="riyaz__chart">
+      <svg data-ref="chart" viewBox="0 0 280 110" role="img" aria-label="Minutes practised over the last 14 days"></svg>
+      <div class="riyaz__axis muted"><span>2 weeks ago</span><span>today</span></div>
+    </div>
+  </div>
+</ToolCard>
+
+<script>
+  import { mountAll, ref, setPressed } from '../../lib/dom';
+  import { usePref } from '../../lib/settings';
+
+  const log = usePref<Record<string, number>>('riyaz-log', {}); // date -> seconds
+  const dayKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  mountAll('riyaz', (root) => {
+    const timeEl = ref(root, 'time');
+    const todayEl = ref(root, 'today');
+    const streakEl = ref(root, 'streak');
+    const chart = ref(root, 'chart') as unknown as SVGSVGElement;
+    const btn = ref(root, 'play');
+
+    let running = false;
+    let sessionStart = 0;
+    let timer: number | null = null;
+    let sessionSecs = 0;
+
+    const fmt = (s: number) => {
+      const m = Math.floor(s / 60);
+      const h = Math.floor(m / 60);
+      const ss = String(Math.floor(s % 60)).padStart(2, '0');
+      return h ? `${h}:${String(m % 60).padStart(2, '0')}:${ss}` : `${String(m).padStart(2, '0')}:${ss}`;
+    };
+
+    function commit() {
+      if (!sessionSecs) return;
+      const data = log.get();
+      const k = dayKey(new Date());
+      data[k] = (data[k] ?? 0) + sessionSecs;
+      log.set(data);
+      sessionSecs = 0;
+    }
+
+    function render(liveExtra = 0) {
+      const data = log.get();
+      const days: { key: string; secs: number }[] = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = dayKey(d);
+        days.push({ key, secs: (data[key] ?? 0) + (i === 0 ? liveExtra : 0) });
+      }
+      const max = Math.max(20 * 60, ...days.map((d) => d.secs));
+      const bw = 280 / 14;
+      chart.innerHTML = days
+        .map((d, i) => {
+          const h = Math.max(2, (d.secs / max) * 96);
+          const cls = i === 13 ? 'riyaz__bar riyaz__bar--today' : d.secs ? 'riyaz__bar' : 'riyaz__bar riyaz__bar--empty';
+          return `<rect class="${cls}" x="${i * bw + 3}" y="${100 - h}" width="${bw - 6}" height="${h}" rx="3"><title>${d.key}: ${Math.round(d.secs / 60)} min</title></rect>`;
+        })
+        .join('') + `<line x1="0" x2="280" y1="100.5" y2="100.5" class="riyaz__base"/>`;
+
+      todayEl.textContent = `${Math.round(days[13].secs / 60)} min today`;
+      // streak: consecutive days with practice ending today (or yesterday if not yet today)
+      let streak = 0;
+      for (let i = 13; i >= 0; i--) {
+        if (days[i].secs > 0) streak++;
+        else if (i === 13) continue;
+        else break;
+      }
+      streakEl.textContent = `${streak}-day streak`;
+    }
+
+    function tick() {
+      sessionSecs = (performance.now() - sessionStart) / 1000;
+      timeEl.textContent = fmt(sessionSecs);
+      render(sessionSecs);
+    }
+
+    btn.addEventListener('click', () => {
+      running = !running;
+      setPressed(btn, running);
+      if (running) {
+        sessionStart = performance.now();
+        timer = window.setInterval(tick, 1000);
+      } else {
+        if (timer != null) clearInterval(timer);
+        commit();
+        render();
+      }
+    });
+    window.addEventListener('pagehide', () => running && commit());
+    render();
+  });
+</script>
+
+<style>
+  .riyaz {
+    display: grid;
+    grid-template-columns: auto minmax(0, 26rem);
+    justify-content: space-between;
+    gap: var(--space-8);
+    align-items: center;
+  }
+  @media (max-width: 600px) {
+    .riyaz {
+      grid-template-columns: 1fr;
+    }
+  }
+  .riyaz__clock {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .riyaz__time {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .riyaz__sub {
+    font-size: var(--text-sm);
+  }
+  .riyaz__chart svg {
+    width: 100%;
+    overflow: visible;
+  }
+  .riyaz :global(.riyaz__bar) {
+    fill: var(--color-bamboo);
+    opacity: 0.75;
+  }
+  .riyaz :global(.riyaz__bar--empty) {
+    fill: var(--color-surface-3);
+    opacity: 1;
+  }
+  .riyaz :global(.riyaz__bar--today) {
+    fill: var(--color-accent);
+    opacity: 1;
+  }
+  .riyaz :global(.riyaz__base) {
+    stroke: var(--color-border-strong);
+  }
+  .riyaz__axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--space-1);
+    font-size: var(--text-xs);
+  }
+</style>

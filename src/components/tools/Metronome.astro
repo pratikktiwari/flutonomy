@@ -1,0 +1,313 @@
+---
+import ToolCard from '../ui/ToolCard.astro';
+import Icon from '../ui/Icon.astro';
+import PlayButton from '../ui/PlayButton.astro';
+import RangeField from '../ui/RangeField.astro';
+import Segmented from '../ui/Segmented.astro';
+
+interface Props {
+  bpm?: number;
+  beats?: number;
+  embedded?: boolean;
+}
+const { bpm = 80, beats = 4, embedded = false } = Astro.props;
+---
+
+<ToolCard
+  title="Metronome"
+  hindi="मेट्रोनोम"
+  icon="metronome"
+  href="/tools/metronome"
+  description={embedded ? undefined : 'Steady pulse with accents, subdivisions and tap tempo.'}
+>
+  <div class="metro" data-tool="metronome" data-bpm={bpm} data-beats={beats}>
+    <div class="metro__stage">
+      <svg class="metro__pendulum" viewBox="0 0 200 130" aria-hidden="true">
+        <path class="metro__arc" d="M30 112 A 90 90 0 0 1 170 112" />
+        <g class="metro__arm" data-ref="arm">
+          <line x1="100" y1="120" x2="100" y2="22" />
+          <rect x="92" y="44" width="16" height="12" rx="3" />
+        </g>
+        <circle class="metro__pivot" cx="100" cy="120" r="5" />
+      </svg>
+
+      <div class="metro__tempo">
+        <button type="button" class="btn btn--ghost btn--round metro__nudge" data-ref="minus" aria-label="Slower">
+          <Icon name="minus" />
+        </button>
+        <div class="metro__bpm">
+          <output data-ref="bpm">{bpm}</output>
+          <span>BPM</span>
+        </div>
+        <button type="button" class="btn btn--ghost btn--round metro__nudge" data-ref="plus" aria-label="Faster">
+          <Icon name="plus" />
+        </button>
+      </div>
+
+      <div class="metro__beats" data-ref="dots" aria-hidden="true"></div>
+    </div>
+
+    <div class="metro__controls">
+      <RangeField label="Tempo" ref="tempo" min={30} max={300} value={bpm} unit=" bpm" />
+      <div class="metro__row">
+        <div class="field">
+          <span class="field__label">Beats per bar</span>
+          <Segmented
+            ref="beats"
+            label="Beats per bar"
+            value={beats}
+            options={[2, 3, 4, 5, 6, 7, 8].map((n) => ({ value: n, label: String(n) }))}
+          />
+        </div>
+        <div class="field">
+          <span class="field__label">Subdivision</span>
+          <Segmented
+            ref="sub"
+            label="Subdivision"
+            value={1}
+            options={[
+              { value: 1, label: '♩', title: 'Quarter notes' },
+              { value: 2, label: '♫', title: 'Eighths (2 per beat)' },
+              { value: 3, label: '3', title: 'Triplets' },
+              { value: 4, label: '4', title: 'Sixteenths (4 per beat)' },
+            ]}
+          />
+        </div>
+      </div>
+      <div class="metro__actions">
+        <PlayButton label="Start metronome" />
+        <button type="button" class="btn" data-ref="tap"><Icon name="tap" /> Tap tempo</button>
+        <span class="chip" data-ref="tempo-name">Moderato</span>
+      </div>
+    </div>
+  </div>
+</ToolCard>
+
+<script>
+  import { Scheduler, audio, registerStopper } from '../../lib/audio/engine';
+  import { click } from '../../lib/audio/voices';
+  import { mountAll, ref, bindRange, bindSegmented, setPressed, clamp } from '../../lib/dom';
+  import { usePref } from '../../lib/settings';
+
+  const TEMPO_NAMES: [number, string][] = [
+    [40, 'Grave'], [60, 'Largo'], [66, 'Larghetto'], [76, 'Adagio'], [108, 'Andante'],
+    [120, 'Moderato'], [156, 'Allegro'], [176, 'Vivace'], [200, 'Presto'], [999, 'Prestissimo'],
+  ];
+
+  mountAll('metronome', (root) => {
+    const pref = usePref('metronome', { bpm: Number(root.dataset.bpm), beats: Number(root.dataset.beats), sub: 1 });
+    const state = pref.get();
+    let { bpm, beats, sub } = state;
+
+    const bpmOut = ref(root, 'bpm');
+    const dotsEl = ref(root, 'dots');
+    const arm = ref(root, 'arm');
+    const playBtn = ref(root, 'play');
+    const tempoName = ref(root, 'tempo-name');
+    let lastBeatTime = 0;
+    let beatCount = 0;
+
+    const save = () => pref.set({ bpm, beats, sub });
+
+    const renderDots = () => {
+      dotsEl.innerHTML = '';
+      for (let i = 0; i < beats; i++) {
+        const d = document.createElement('span');
+        d.className = 'metro__dot' + (i === 0 ? ' metro__dot--accent' : '');
+        dotsEl.append(d);
+      }
+    };
+
+    const setBpm = (v: number) => {
+      bpm = clamp(Math.round(v), 30, 300);
+      bpmOut.textContent = String(bpm);
+      tempo.set(bpm);
+      tempoName.textContent = TEMPO_NAMES.find(([max]) => bpm < max)![1];
+      save();
+    };
+
+    const tempo = bindRange(root, 'tempo', setBpm, (v) => String(v));
+    const beatsCtl = bindSegmented(root, 'beats', (v) => {
+      beats = Number(v);
+      renderDots();
+      save();
+    });
+    const subCtl = bindSegmented(root, 'sub', (v) => {
+      sub = Number(v);
+      save();
+    });
+    beatsCtl.select(String(beats));
+    subCtl.select(String(sub));
+
+    const sched = new Scheduler({
+      stepDuration: () => 60 / bpm / sub,
+      onSchedule: ({ step, time }) => {
+        const inBeat = step % sub;
+        const beat = Math.floor(step / sub) % beats;
+        click(time, inBeat === 0 ? (beat === 0 ? 'accent' : 'beat') : 'sub');
+      },
+      onVisual: ({ step, time }) => {
+        if (step % sub !== 0) return;
+        const beat = Math.floor(step / sub) % beats;
+        lastBeatTime = time;
+        beatCount = Math.floor(step / sub);
+        dotsEl.querySelectorAll('.metro__dot').forEach((d, i) => d.classList.toggle('is-on', i === beat));
+      },
+    });
+
+    // Pendulum: passes through centre exactly on each click
+    const swing = () => {
+      if (!sched.running) {
+        arm.style.transform = 'rotate(0deg)';
+        return;
+      }
+      const now = audio().currentTime;
+      const phase = clamp((now - lastBeatTime) / (60 / bpm), 0, 1);
+      const angle = 28 * Math.sin(Math.PI * (beatCount + phase));
+      arm.style.transform = `rotate(${angle}deg)`;
+      requestAnimationFrame(swing);
+    };
+
+    const stop = () => {
+      sched.stop();
+      setPressed(playBtn, false);
+      dotsEl.querySelectorAll('.metro__dot').forEach((d) => d.classList.remove('is-on'));
+    };
+    registerStopper(stop);
+
+    playBtn.addEventListener('click', () => {
+      if (sched.running) return stop();
+      audio();
+      sched.start();
+      setPressed(playBtn, true);
+      requestAnimationFrame(swing);
+    });
+
+    ref(root, 'minus').addEventListener('click', () => setBpm(bpm - 1));
+    ref(root, 'plus').addEventListener('click', () => setBpm(bpm + 1));
+
+    // Tap tempo: average of the last few intervals
+    let taps: number[] = [];
+    ref(root, 'tap').addEventListener('click', () => {
+      const t = performance.now();
+      taps = taps.filter((x) => t - x < 2500);
+      taps.push(t);
+      if (taps.length >= 2) {
+        const intervals = taps.slice(1).map((x, i) => x - taps[i]);
+        const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        setBpm(60000 / avg);
+      }
+    });
+
+    renderDots();
+    setBpm(bpm);
+  });
+</script>
+
+<style>
+  .metro {
+    display: grid;
+    gap: var(--space-6);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: center;
+  }
+  @media (max-width: 720px) {
+    .metro {
+      grid-template-columns: 1fr;
+    }
+  }
+  .metro__stage {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-3);
+  }
+  .metro__pendulum {
+    width: min(100%, 240px);
+    overflow: visible;
+  }
+  .metro__arc {
+    fill: none;
+    stroke: var(--color-border-strong);
+    stroke-width: 1.5;
+    stroke-dasharray: 2 6;
+    stroke-linecap: round;
+  }
+  .metro__arm {
+    transform-origin: 100px 120px;
+    transform-box: view-box;
+  }
+  .metro__arm line {
+    stroke: var(--color-accent);
+    stroke-width: 3;
+    stroke-linecap: round;
+  }
+  .metro__arm rect {
+    fill: var(--color-text);
+  }
+  .metro__pivot {
+    fill: var(--color-accent);
+  }
+  .metro__tempo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+  .metro__nudge {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+  .metro__bpm {
+    display: grid;
+    justify-items: center;
+    line-height: 1;
+    min-width: 6ch;
+  }
+  .metro__bpm output {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-variant-numeric: tabular-nums;
+  }
+  .metro__bpm span {
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-wide);
+    color: var(--color-text-subtle);
+  }
+  .metro__beats {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .metro__beats :global(.metro__dot) {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 50%;
+    background: var(--color-surface-3);
+    transition: background var(--duration-fast), transform var(--duration-fast) var(--ease-out);
+  }
+  .metro__beats :global(.metro__dot--accent) {
+    outline: 1.5px solid var(--color-sam);
+    outline-offset: 2px;
+  }
+  .metro__beats :global(.metro__dot.is-on) {
+    background: var(--color-accent);
+    transform: scale(1.3);
+    box-shadow: var(--glow-accent);
+  }
+  .metro__beats :global(.metro__dot--accent.is-on) {
+    background: var(--color-sam);
+  }
+  .metro__controls {
+    display: grid;
+    gap: var(--space-5);
+  }
+  .metro__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+  }
+  .metro__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+</style>

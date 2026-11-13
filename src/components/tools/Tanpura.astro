@@ -1,0 +1,275 @@
+---
+import ToolCard from '../ui/ToolCard.astro';
+import PlayButton from '../ui/PlayButton.astro';
+import RangeField from '../ui/RangeField.astro';
+import Segmented from '../ui/Segmented.astro';
+import SaPicker from '../ui/SaPicker.astro';
+
+interface Props {
+  first?: 'P' | 'm' | 'N' | 'D';
+  embedded?: boolean;
+}
+const { first = 'P', embedded = false } = Astro.props;
+---
+
+<ToolCard
+  title="Tanpura"
+  hindi="तानपूरा"
+  icon="tanpura"
+  href="/tools/tanpura"
+  description={embedded ? undefined : 'A continuous drone to tune your ear to Sa. Synthesised live in your key.'}
+>
+  <div class="tanpura" data-tool="tanpura" data-first={first}>
+    <div class="tanpura__strings" aria-hidden="true">
+      <svg viewBox="0 0 220 200" class="tanpura__svg" data-ref="svg">
+        <defs>
+          <radialGradient id="tanpura-gourd" cx="50%" cy="40%" r="60%">
+            <stop offset="0%" stop-color="var(--color-accent)" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="var(--color-accent)" stop-opacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="110" cy="176" rx="90" ry="22" fill="url(#tanpura-gourd)" />
+        <line class="tanpura__bridge" x1="50" y1="170" x2="170" y2="170" />
+        <line class="tanpura__nut" x1="62" y1="12" x2="158" y2="12" />
+        {
+          [0, 1, 2, 3].map((i) => (
+            <g class="tanpura__string" data-string={i}>
+              <path d={`M ${74 + i * 24} 12 L ${74 + i * 24} 170`} />
+            </g>
+          ))
+        }
+      </svg>
+      <div class="tanpura__labels" data-ref="labels">
+        <span>Pa</span><span>Sa</span><span>Sa</span><span>Sa</span>
+      </div>
+    </div>
+
+    <div class="tanpura__controls">
+      <SaPicker />
+      <div class="field">
+        <span class="field__label">First string</span>
+        <Segmented
+          ref="first"
+          label="First string tuning"
+          value={first}
+          options={[
+            { value: 'P', label: 'Pa', title: 'Most raags' },
+            { value: 'm', label: 'Ma', title: 'Raags without Pa, e.g. Malkauns' },
+            { value: 'N', label: 'Ni', title: 'Raags like Marwa, Puriya' },
+            { value: 'D', label: 'Dha', title: 'Occasional' },
+          ]}
+        />
+      </div>
+      <RangeField label="Cycle length" ref="speed" min={2.5} max={8} step={0.1} value={4.4} unit=" s" />
+      <RangeField label="Volume" ref="vol" min={0} max={100} value={70} unit="%" />
+      <div class="cluster">
+        <PlayButton label="Start tanpura" />
+        <span class="muted tanpura__status" data-ref="status" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+</ToolCard>
+
+<script>
+  import { audio, bus, setBusVolume } from '../../lib/audio/engine';
+  import { tanpuraBuffer, pluck } from '../../lib/audio/voices';
+  import { mountAll, ref, bindRange, bindSegmented, setPressed } from '../../lib/dom';
+  import { saHz, onSettings, usePref } from '../../lib/settings';
+
+  /** first-string ratio relative to the middle (jodi) Sa — all in the lower octave */
+  const FIRST: Record<string, { ratio: number; label: string }> = {
+    P: { ratio: 3 / 4, label: 'Pa' },
+    m: { ratio: 2 / 3, label: 'Ma' },
+    N: { ratio: 15 / 16, label: 'Ni' },
+    D: { ratio: 5 / 6, label: 'Dha' },
+  };
+  /** pluck pattern as fractions of the cycle: first, jodi, jodi, kharaj */
+  const PATTERN = [0, 0.27, 0.42, 0.62];
+
+  mountAll('tanpura', (root) => {
+    const pref = usePref('tanpura', { first: root.dataset.first!, speed: 4.4, vol: 70 });
+    let { first, speed, vol } = pref.get();
+    const save = () => pref.set({ first, speed, vol });
+
+    const playBtn = ref(root, 'play');
+    const status = ref(root, 'status');
+    const labels = ref(root, 'labels');
+    const strings = Array.from(root.querySelectorAll<SVGGElement>('.tanpura__string'));
+
+    let running = false;
+    let timer: number | null = null;
+    let nextCycle = 0;
+    let buffers: AudioBuffer[] = [];
+    const visualTimers: number[] = [];
+
+    /** Put the drone in a comfortable register: jodi Sa between ~120–240 Hz. */
+    function jodiHz() {
+      let f = saHz();
+      while (f > 240) f /= 2;
+      while (f < 120) f *= 2;
+      return f;
+    }
+
+    function build() {
+      const sa = jodiHz();
+      const freqs = [sa * FIRST[first].ratio, sa, sa, sa / 2];
+      buffers = freqs.map((f) => tanpuraBuffer(f, Math.max(5.5, speed + 1.5)));
+      labels.children[0].textContent = FIRST[first].label;
+    }
+
+    function animateString(i: number, delayMs: number) {
+      visualTimers.push(
+        window.setTimeout(() => {
+          const s = strings[i];
+          s.classList.remove('is-ringing');
+          // restart the CSS animation
+          void (s as unknown as HTMLElement).getBoundingClientRect();
+          s.classList.add('is-ringing');
+        }, delayMs),
+      );
+    }
+
+    function schedule() {
+      const c = audio();
+      while (nextCycle < c.currentTime + 0.5) {
+        PATTERN.forEach((frac, i) => {
+          const t = nextCycle + frac * speed + (Math.random() - 0.5) * 0.03; // human timing
+          pluck(buffers[i], t, i === 3 ? 0.75 : 0.62 + Math.random() * 0.08);
+          animateString(i, Math.max(0, (t - c.currentTime) * 1000));
+        });
+        nextCycle += speed;
+      }
+    }
+
+    function start() {
+      status.textContent = 'Tuning strings…';
+      setPressed(playBtn, true);
+      // Let the "tuning" text paint before the (short) synthesis work
+      setTimeout(() => {
+        const c = audio();
+        setBusVolume('tanpura', vol / 100);
+        build();
+        running = true;
+        nextCycle = c.currentTime + 0.1;
+        schedule();
+        timer = window.setInterval(schedule, 150);
+        status.textContent = '';
+      }, 30);
+    }
+
+    function stop() {
+      running = false;
+      if (timer != null) clearInterval(timer);
+      timer = null;
+      visualTimers.splice(0).forEach(clearTimeout);
+      strings.forEach((s) => s.classList.remove('is-ringing'));
+      setPressed(playBtn, false);
+      // fade the tail out quickly instead of cutting
+      const g = bus('tanpura');
+      const c = audio();
+      g.gain.cancelScheduledValues(c.currentTime);
+      g.gain.setTargetAtTime(0, c.currentTime, 0.15);
+      // new plucks after a restart will re-raise the volume
+    }
+
+    playBtn.addEventListener('click', () => (running ? stop() : start()));
+
+    bindSegmented(root, 'first', (v) => {
+      first = v;
+      save();
+      labels.children[0].textContent = FIRST[first].label;
+      if (running) build();
+    }).select(first);
+
+    bindRange(root, 'speed', (v) => {
+      speed = v;
+      save();
+    }, (v) => v.toFixed(1)).set(speed);
+
+    bindRange(root, 'vol', (v) => {
+      vol = v;
+      save();
+      if (running) setBusVolume('tanpura', v / 100);
+    }).set(vol);
+
+    labels.children[0].textContent = FIRST[first].label;
+
+    onSettings(() => {
+      if (running) build();
+    });
+  });
+</script>
+
+<style>
+  .tanpura {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: var(--space-6);
+    align-items: center;
+  }
+  @media (max-width: 680px) {
+    .tanpura {
+      grid-template-columns: 1fr;
+    }
+  }
+  .tanpura__strings {
+    width: min(100%, 240px);
+    margin-inline: auto;
+  }
+  .tanpura__svg {
+    width: 100%;
+    overflow: visible;
+  }
+  .tanpura__bridge,
+  .tanpura__nut {
+    stroke: var(--color-text-subtle);
+    stroke-width: 3;
+    stroke-linecap: round;
+  }
+  .tanpura__string path {
+    fill: none;
+    stroke: var(--color-text-muted);
+    stroke-width: 1.5;
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+  .tanpura__string.is-ringing path {
+    stroke: var(--color-accent);
+    animation: tanpura-ring 2.8s var(--ease-out) forwards;
+  }
+  @keyframes tanpura-ring {
+    0% { stroke-width: 3; filter: drop-shadow(0 0 6px var(--color-accent)); transform: translateX(2.5px); }
+    3% { transform: translateX(-2.2px); }
+    6% { transform: translateX(1.8px); }
+    9% { transform: translateX(-1.4px); }
+    12% { transform: translateX(1px); }
+    15% { transform: translateX(-0.6px); }
+    20% { transform: translateX(0); }
+    100% { stroke-width: 1.5; stroke: var(--color-text-muted); filter: none; }
+  }
+  .tanpura__labels {
+    display: grid;
+    grid-template-columns: repeat(4, 24px);
+    justify-content: center;
+    margin-top: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--color-text-subtle);
+    text-align: center;
+    font-family: var(--font-display);
+  }
+  .tanpura__labels span:first-child {
+    color: var(--color-accent);
+  }
+  .tanpura__labels span:last-child::after {
+    content: '·';
+    display: block;
+    line-height: 0.5;
+  }
+  .tanpura__controls {
+    display: grid;
+    gap: var(--space-5);
+  }
+  .tanpura__status {
+    font-size: var(--text-sm);
+  }
+</style>

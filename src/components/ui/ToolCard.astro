@@ -1,0 +1,109 @@
+---
+/**
+ * Common shell for every practice tool. Gives a consistent header
+ * (icon, name, Hindi name), an optional link to the full-page tool and a
+ * body slot. Used both on tool pages and embedded inside MDX lessons.
+ */
+import type { ComponentProps } from 'astro/types';
+import Icon from './Icon.astro';
+import { url } from '../../lib/url';
+
+interface Props {
+  title: string;
+  hindi?: string;
+  icon: ComponentProps<typeof Icon>['name'];
+  href?: string;
+  description?: string;
+  class?: string;
+}
+const { title, hindi, icon, href, description, class: cls } = Astro.props;
+const onThisPage = href && Astro.url.pathname.replace(/\/$/, '') === url(href).replace(/\/$/, '');
+---
+
+<section class:list={['tool-card', cls]}>
+  <header class="tool-card__head">
+    <span class="tool-card__icon"><Icon name={icon} size={20} /></span>
+    <div class="tool-card__titles">
+      <h3 class="tool-card__title">
+        {title}
+        {hindi && <span class="tool-card__hindi" lang="hi">{hindi}</span>}
+      </h3>
+      {description && <p class="tool-card__desc">{description}</p>}
+    </div>
+    <slot name="actions" />
+    {
+      href && !onThisPage && (
+        <a class="btn btn--ghost tool-card__open" href={url(href)}>
+          Open <Icon name="arrow" size={16} />
+        </a>
+      )
+    }
+  </header>
+  <div class="tool-card__body">
+    <slot />
+  </div>
+</section>
+
+<style>
+  .tool-card {
+    position: relative;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    background:
+      radial-gradient(120% 80% at 0% 0%, var(--color-accent-soft), transparent 55%),
+      var(--color-surface);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+  .tool-card__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6) 0;
+  }
+  .tool-card__icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-md);
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+  .tool-card__titles {
+    flex: 1;
+    min-width: 0;
+  }
+  .tool-card__title {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    font-size: var(--text-xl);
+  }
+  .tool-card__hindi {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+    color: var(--color-text-subtle);
+  }
+  .tool-card__desc {
+    margin-top: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    line-height: var(--leading-snug);
+  }
+  .tool-card__body {
+    padding: var(--space-5) var(--space-6) var(--space-6);
+  }
+  @media (max-width: 560px) {
+    .tool-card__head,
+    .tool-card__body {
+      padding-inline: var(--space-4);
+    }
+    .tool-card__open {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,153 @@
+---
+import Icon from '../ui/Icon.astro';
+import SaPicker from '../ui/SaPicker.astro';
+import { url } from '../../lib/url';
+
+const nav = [
+  { href: '/lessons', label: 'Learn' },
+  { href: '/tools', label: 'Tools' },
+  { href: '/practice', label: 'Practice room' },
+];
+const path = Astro.url.pathname;
+---
+
+<header class="site-header">
+  <div class="container site-header__inner">
+    <a href={url('/')} class="brand" aria-label="Flutonomy home">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M5 25 23 7l3 3L8 28z" fill="currentColor" />
+        <circle cx="12.4" cy="17.6" r="1.2" fill="var(--color-bg)" />
+        <circle cx="15.4" cy="14.6" r="1.2" fill="var(--color-bg)" />
+        <circle cx="18.4" cy="11.6" r="1.2" fill="var(--color-bg)" />
+        <path d="M24 3c2 1.5 3.5 3 4.5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".6" />
+      </svg>
+      <span class="brand__name">Flutonomy</span>
+    </a>
+
+    <nav class="site-nav" aria-label="Main">
+      {
+        nav.map((n) => (
+          <a href={url(n.href)} aria-current={path.startsWith(url(n.href)) ? 'page' : undefined}>
+            {n.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="site-header__tools">
+      <div class="site-header__sa">
+        <span class="muted">Sa</span>
+        <SaPicker compact />
+      </div>
+      <button type="button" class="btn btn--ghost theme-toggle" data-theme-toggle aria-label="Toggle light / dark theme">
+        <Icon name="sun" class="theme-toggle__sun" />
+        <Icon name="moon" class="theme-toggle__moon" />
+      </button>
+    </div>
+  </div>
+</header>
+
+<script>
+  document.querySelectorAll('[data-theme-toggle]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const root = document.documentElement;
+      const next = root.dataset.theme === 'light' ? 'dark' : 'light';
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem('flutonomy:theme', next);
+      } catch {}
+    }),
+  );
+</script>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid var(--color-border);
+    background: color-mix(in oklab, var(--color-bg) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(1.2);
+  }
+  .site-header__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-6);
+    min-height: var(--header-height);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+  .brand__mark {
+    width: 1.75rem;
+    height: 1.75rem;
+    color: var(--color-accent);
+  }
+  .brand__name {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-medium);
+    letter-spacing: -0.01em;
+  }
+  .site-nav {
+    display: flex;
+    gap: var(--space-1);
+  }
+  .site-nav a {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-pill);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    text-decoration: none;
+    transition: color var(--duration-fast), background var(--duration-fast);
+  }
+  .site-nav a:hover {
+    color: var(--color-text);
+  }
+  .site-nav a[aria-current='page'] {
+    color: var(--color-text);
+    background: var(--color-surface-2);
+  }
+  .site-header__tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+  }
+  .site-header__sa {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+  .site-header__sa :global(.sa-picker__hz) {
+    display: none;
+  }
+  .theme-toggle {
+    width: 2.5rem;
+    padding: 0;
+  }
+  :global(:root[data-theme='light']) .theme-toggle :global(.theme-toggle__sun),
+  .theme-toggle :global(.theme-toggle__moon) {
+    display: none;
+  }
+  :global(:root[data-theme='light']) .theme-toggle :global(.theme-toggle__moon) {
+    display: block;
+  }
+  @media (max-width: 720px) {
+    .site-header__inner {
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-4);
+      padding-block: var(--space-2);
+    }
+    .site-nav {
+      order: 3;
+      width: 100%;
+      overflow-x: auto;
+    }
+  }
+</style>

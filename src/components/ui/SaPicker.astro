@@ -1,0 +1,83 @@
+---
+/**
+ * Choose the tonic (Sa). Shared across all tools via lib/settings, so
+ * changing it here retunes the tanpura, tabla, tuner and swara player.
+ */
+import { WESTERN_NOTES } from '../../lib/swara';
+interface Props {
+  compact?: boolean;
+}
+const { compact = false } = Astro.props;
+---
+
+<div class:list={['sa-picker', compact && 'sa-picker--compact']} data-tool="sa-picker">
+  {!compact && <span class="field__label">Sa (your flute's key)</span>}
+  <div class="sa-picker__row">
+    <select class="select" data-ref="note" aria-label="Sa note">
+      {WESTERN_NOTES.map((n) => <option value={n}>{n}</option>)}
+    </select>
+    <select class="select" data-ref="octave" aria-label="Sa octave">
+      {[3, 4, 5].map((o) => <option value={o}>{o}</option>)}
+    </select>
+    <span class="sa-picker__hz" data-ref="hz">261.6 Hz</span>
+    {
+      !compact && (
+        <button type="button" class="btn btn--ghost" data-ref="hear" title="Hear Sa">
+          Hear Sa
+        </button>
+      )
+    }
+  </div>
+</div>
+
+<script>
+  import { mountAll, ref, maybeRef } from '../../lib/dom';
+  import { getSettings, setSettings, onSettings, saHz } from '../../lib/settings';
+  import { fluteNote } from '../../lib/audio/voices';
+  import { audio } from '../../lib/audio/engine';
+  import type { WesternNote } from '../../lib/swara';
+
+  mountAll('sa-picker', (root) => {
+    const note = ref<HTMLSelectElement>(root, 'note');
+    const octave = ref<HTMLSelectElement>(root, 'octave');
+    const hz = ref(root, 'hz');
+
+    const paint = () => {
+      const s = getSettings();
+      note.value = s.saNote;
+      octave.value = String(s.saOctave);
+      hz.textContent = `${saHz(s).toFixed(1)} Hz`;
+    };
+    note.addEventListener('change', () => setSettings({ saNote: note.value as WesternNote }));
+    octave.addEventListener('change', () => setSettings({ saOctave: Number(octave.value) }));
+    maybeRef(root, 'hear')?.addEventListener('click', () => {
+      const c = audio();
+      fluteNote(saHz(), c.currentTime + 0.02, 1.4);
+    });
+    onSettings(paint);
+    paint();
+  });
+</script>
+
+<style>
+  .sa-picker {
+    display: grid;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+  .sa-picker__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .sa-picker__hz {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-subtle);
+    min-width: 8ch;
+  }
+  .sa-picker--compact .select {
+    min-height: 2rem;
+  }
+</style>

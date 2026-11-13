@@ -1,0 +1,86 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { url } from '../../lib/url';
+interface Props {
+  lessons: CollectionEntry<'lessons'>[];
+}
+const { lessons } = Astro.props;
+---
+
+<ol class="lessons">
+  {
+    lessons.map((l) => (
+      <li>
+        <a href={url(`/lessons/${l.id}`)} class="lesson-row">
+          <span class="lesson-row__num">{String(l.data.order).padStart(2, '0')}</span>
+          <span class="lesson-row__body">
+            <span class="lesson-row__title">{l.data.title}</span>
+            <span class="lesson-row__summary">{l.data.summary}</span>
+          </span>
+          <span class="lesson-row__meta">
+            <span class="chip chip--bamboo">{l.data.level}</span>
+            <span class="lesson-row__min">{l.data.minutes} min</span>
+          </span>
+        </a>
+      </li>
+    ))
+  }
+</ol>
+
+<style>
+  .lessons {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    border-top: 1px solid var(--color-border);
+  }
+  .lesson-row {
+    display: grid;
+    grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+    gap: var(--space-4);
+    align-items: center;
+    padding: var(--space-5) var(--space-2);
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text);
+    text-decoration: none;
+    transition: background var(--duration-base);
+  }
+  .lesson-row:hover {
+    background: linear-gradient(to right, var(--color-accent-soft), transparent 70%);
+  }
+  .lesson-row__num {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    color: var(--color-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .lesson-row__body {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .lesson-row__title {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+  }
+  .lesson-row__summary {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+  .lesson-row__meta {
+    display: grid;
+    justify-items: end;
+    gap: var(--space-1);
+  }
+  .lesson-row__min {
+    font-size: var(--text-xs);
+    color: var(--color-text-subtle);
+  }
+  @media (max-width: 560px) {
+    .lesson-row {
+      grid-template-columns: 2.5rem 1fr;
+    }
+    .lesson-row__meta {
+      display: none;
+    }
+  }
+</style>

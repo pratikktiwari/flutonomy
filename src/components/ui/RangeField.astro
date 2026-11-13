@@ -1,0 +1,34 @@
+---
+/**
+ * Labelled slider with a live value read-out. Tool scripts find the input
+ * via `data-ref` and the value element via `data-ref-value`.
+ */
+interface Props {
+  label: string;
+  ref: string;
+  min: number;
+  max: number;
+  step?: number;
+  value: number;
+  unit?: string;
+}
+const { label, ref, min, max, step = 1, value, unit = '' } = Astro.props;
+const pct = ((value - min) / (max - min)) * 100;
+---
+
+<label class="field">
+  <span class="field__label">
+    <span>{label}</span>
+    <span class="field__value"><span data-ref-value={ref}>{value}</span>{unit}</span>
+  </span>
+  <input
+    class="range"
+    type="range"
+    data-ref={ref}
+    min={min}
+    max={max}
+    step={step}
+    value={value}
+    style={`--pct:${pct}%`}
+  />
+</label>

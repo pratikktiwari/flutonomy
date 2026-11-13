@@ -1,0 +1,150 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Icon from '../../components/ui/Icon.astro';
+import { url } from '../../lib/url';
+
+export async function getStaticPaths() {
+  const lessons = (await getCollection('lessons')).sort((a, b) => a.data.order - b.data.order);
+  return lessons.map((lesson, i) => ({
+    params: { slug: lesson.id },
+    props: { lesson, prev: lessons[i - 1], next: lessons[i + 1] },
+  }));
+}
+
+const { lesson, prev, next } = Astro.props;
+const { Content, headings } = await render(lesson);
+const toc = headings.filter((h) => h.depth === 2);
+---
+
+<BaseLayout title={lesson.data.title} description={lesson.data.summary}>
+  <div class="container lesson">
+    <aside class="lesson__aside">
+      <a href={url('/lessons')} class="lesson__back">← All lessons</a>
+      {
+        toc.length > 0 && (
+          <nav class="lesson__toc" aria-label="On this page">
+            <p class="eyebrow">On this page</p>
+            {toc.map((h) => <a href={`#${h.slug}`}>{h.text}</a>)}
+          </nav>
+        )
+      }
+    </aside>
+
+    <article class="lesson__main">
+      <header class="lesson__head">
+        <p class="eyebrow">Lesson {lesson.data.order}</p>
+        <h1>{lesson.data.title}</h1>
+        <p class="lesson__summary">{lesson.data.summary}</p>
+        <div class="cluster">
+          <span class="chip chip--bamboo">{lesson.data.level}</span>
+          <span class="chip"><Icon name="timer" size={12} /> {lesson.data.minutes} min</span>
+        </div>
+      </header>
+
+      <div class="prose">
+        <Content />
+      </div>
+
+      <nav class="lesson__pager" aria-label="Lesson navigation">
+        {prev ? <a href={url(`/lessons/${prev.id}`)} class="lesson__pg"><span>Previous</span>{prev.data.title}</a> : <span />}
+        {next && <a href={url(`/lessons/${next.id}`)} class="lesson__pg lesson__pg--next"><span>Next</span>{next.data.title}</a>}
+      </nav>
+    </article>
+  </div>
+</BaseLayout>
+
+<style>
+  .lesson {
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    gap: var(--space-12);
+  }
+  @media (max-width: 960px) {
+    .lesson {
+      grid-template-columns: 1fr;
+      gap: var(--space-4);
+    }
+    .lesson__toc {
+      display: none !important;
+    }
+  }
+  .lesson__aside {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-6));
+    align-self: start;
+    display: grid;
+    gap: var(--space-8);
+    font-size: var(--text-sm);
+  }
+  .lesson__back {
+    color: var(--color-text-muted);
+    text-decoration: none;
+  }
+  .lesson__toc {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .lesson__toc a {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    line-height: var(--leading-snug);
+  }
+  .lesson__toc a:hover {
+    color: var(--color-accent);
+  }
+  .lesson__head {
+    display: grid;
+    gap: var(--space-3);
+    max-width: var(--prose-max);
+    margin-bottom: var(--space-10);
+  }
+  .lesson__head h1 {
+    font-size: var(--text-4xl);
+  }
+  .lesson__summary {
+    font-size: var(--text-xl);
+    color: var(--color-text-muted);
+    font-family: var(--font-display);
+    font-style: italic;
+    line-height: var(--leading-snug);
+  }
+  .lesson__main {
+    min-width: 0;
+  }
+  .lesson__main :global(.prose) {
+    max-width: none;
+  }
+  .lesson__main :global(.prose > :is(p, ul, ol, h2, h3, blockquote, table)) {
+    max-width: var(--prose-max);
+  }
+  .lesson__pager {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: var(--space-16);
+    padding-top: var(--space-6);
+    border-top: 1px solid var(--color-border);
+  }
+  .lesson__pg {
+    display: grid;
+    gap: var(--space-1);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    text-decoration: none;
+  }
+  .lesson__pg span {
+    font-family: var(--font-body);
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+  }
+  .lesson__pg--next {
+    text-align: right;
+  }
+  .lesson__pg:hover {
+    color: var(--color-accent);
+  }
+</style>

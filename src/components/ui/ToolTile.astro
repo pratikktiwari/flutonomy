@@ -1,0 +1,75 @@
+---
+import type { ComponentProps } from 'astro/types';
+import Icon from './Icon.astro';
+import { url } from '../../lib/url';
+interface Props {
+  href: string;
+  icon: ComponentProps<typeof Icon>['name'];
+  title: string;
+  hindi?: string;
+  text: string;
+}
+const { href, icon, title, hindi, text } = Astro.props;
+---
+
+<a class="tile" href={url(href)}>
+  <span class="tile__icon"><Icon name={icon} size={22} /></span>
+  <span class="tile__title">{title} {hindi && <span lang="hi">{hindi}</span>}</span>
+  <span class="tile__text">{text}</span>
+  <span class="tile__arrow"><Icon name="arrow" size={18} /></span>
+</a>
+
+<style>
+  .tile {
+    position: relative;
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-6);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    text-decoration: none;
+    transition: border-color var(--duration-base), transform var(--duration-base) var(--ease-out), box-shadow var(--duration-base);
+  }
+  .tile:hover {
+    border-color: color-mix(in oklab, var(--color-accent) 45%, transparent);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .tile__icon {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-bottom: var(--space-2);
+    border-radius: var(--radius-md);
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+  .tile__title {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+  }
+  .tile__title span {
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    color: var(--color-text-subtle);
+  }
+  .tile__text {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    line-height: var(--leading-snug);
+  }
+  .tile__arrow {
+    position: absolute;
+    top: var(--space-6);
+    right: var(--space-6);
+    color: var(--color-text-subtle);
+    transition: transform var(--duration-base) var(--ease-out), color var(--duration-base);
+  }
+  .tile:hover .tile__arrow {
+    transform: translateX(3px);
+    color: var(--color-accent);
+  }
+</style>

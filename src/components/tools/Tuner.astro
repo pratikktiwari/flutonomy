@@ -1,0 +1,439 @@
+---
+import ToolCard from '../ui/ToolCard.astro';
+import Icon from '../ui/Icon.astro';
+import SaPicker from '../ui/SaPicker.astro';
+
+interface Props {
+  embedded?: boolean;
+}
+const { embedded = false } = Astro.props;
+---
+
+<ToolCard
+  title="Sur Darpan"
+  hindi="सुर दर्पण · tuner"
+  icon="mic"
+  href="/tools/tuner"
+  description={embedded ? undefined : 'Play into your mic. See which swara you are on, how many cents off, and a live trace of your pitch.'}
+>
+  <div class="tuner" data-tool="tuner">
+    <div class="tuner__top">
+      <div class="tuner__readout">
+        <div class="tuner__swara" data-ref="swara">—</div>
+        <div class="tuner__hindi" data-ref="hindi" lang="hi">&nbsp;</div>
+        <div class="tuner__hz" data-ref="hz">play a note</div>
+      </div>
+
+      <div class="tuner__meter-wrap">
+        <div class="tuner__meter" aria-hidden="true">
+          <div class="tuner__zone"></div>
+          <div class="tuner__ticks">
+            {[-50, -25, 0, 25, 50].map((c) => <span style={`left:${50 + c}%`}>{c > 0 ? `+${c}` : c}</span>)}
+          </div>
+          <div class="tuner__needle" data-ref="needle"></div>
+        </div>
+        <div class="tuner__cents" data-ref="cents">± 0 cents</div>
+        <div class="tuner__stats">
+          <div><span class="tuner__stat" data-ref="hold">0.0s</span><span>steady hold</span></div>
+          <div><span class="tuner__stat" data-ref="best">0.0s</span><span>best today</span></div>
+          <div><span class="tuner__stat" data-ref="acc">—</span><span>in tune</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tuner__trace">
+      <canvas data-ref="canvas" height="340"></canvas>
+      <div class="tuner__overlay" data-ref="overlay">
+        <button type="button" class="btn btn--primary btn--lg" data-ref="start">
+          <Icon name="mic" /> Start listening
+        </button>
+        <p class="muted">Your audio never leaves this device.</p>
+      </div>
+    </div>
+
+    <div class="tuner__foot">
+      <SaPicker compact />
+      <button type="button" class="btn btn--ghost" data-ref="stop" hidden>Stop listening</button>
+    </div>
+  </div>
+</ToolCard>
+
+<script>
+  import { audio } from '../../lib/audio/engine';
+  import { detectPitch, semisFromSa } from '../../lib/pitch';
+  import { SWARAS, labelForSemis } from '../../lib/swara';
+  import { mountAll, ref, token } from '../../lib/dom';
+  import { saHz } from '../../lib/settings';
+
+  const MIN_SEMI = -7;
+  const MAX_SEMI = 14;
+  const WINDOW_SEC = 8;
+  const IN_TUNE = 15; // cents
+
+  mountAll('tuner', (root) => {
+    const canvas = ref<HTMLCanvasElement>(root, 'canvas');
+    const ctx2d = canvas.getContext('2d')!;
+    const overlay = ref(root, 'overlay');
+    const startBtn = ref(root, 'start');
+    const stopBtn = ref(root, 'stop');
+    const swaraOut = ref(root, 'swara');
+    const hindiOut = ref(root, 'hindi');
+    const hzOut = ref(root, 'hz');
+    const needle = ref(root, 'needle');
+    const centsOut = ref(root, 'cents');
+    const holdOut = ref(root, 'hold');
+    const bestOut = ref(root, 'best');
+    const accOut = ref(root, 'acc');
+
+    let stream: MediaStream | null = null;
+    let analyser: AnalyserNode | null = null;
+    let raf: number | null = null;
+    let data: Float32Array<ArrayBuffer>;
+    const trace: { t: number; s: number | null }[] = [];
+    const recent: number[] = [];
+    let holdStart = 0;
+    let holdNote: number | null = null;
+    let best = 0;
+    let voiced = 0;
+    let tuned = 0;
+    let colors: Record<string, string> = {};
+
+    const readColors = () => {
+      colors = {
+        grid: token('--color-border'),
+        gridStrong: token('--color-border-strong'),
+        text: token('--color-text-subtle'),
+        sa: token('--color-sam'),
+        accent: token('--color-accent'),
+        good: token('--color-bamboo'),
+      };
+    };
+    readColors();
+    new MutationObserver(() => {
+      readColors();
+      draw();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
+    };
+    new ResizeObserver(resize).observe(canvas);
+
+    const yFor = (semi: number, h: number) => {
+      const pad = 12;
+      return pad + ((MAX_SEMI - semi) / (MAX_SEMI - MIN_SEMI)) * (h - pad * 2);
+    };
+
+    function draw() {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      if (!w) return;
+      ctx2d.clearRect(0, 0, w, h);
+      const left = 44;
+
+      // swara grid lines
+      ctx2d.font = '10px Inter Variable, system-ui, sans-serif';
+      ctx2d.textBaseline = 'middle';
+      for (let s = MIN_SEMI; s <= MAX_SEMI; s++) {
+        const pc = ((s % 12) + 12) % 12;
+        const sw = SWARAS[pc];
+        const y = yFor(s, h);
+        const isSa = pc === 0;
+        const strong = sw.variant === 'shuddh' || sw.variant === 'achal';
+        ctx2d.strokeStyle = isSa ? colors.sa : strong ? colors.gridStrong : colors.grid;
+        ctx2d.lineWidth = isSa ? 1.5 : 1;
+        ctx2d.setLineDash(strong ? [] : [2, 4]);
+        ctx2d.beginPath();
+        ctx2d.moveTo(left, y);
+        ctx2d.lineTo(w, y);
+        ctx2d.stroke();
+        if (strong) {
+          ctx2d.fillStyle = isSa ? colors.sa : colors.text;
+          ctx2d.fillText(labelForSemis(s), 6, y);
+        }
+      }
+      ctx2d.setLineDash([]);
+
+      // pitch trace
+      const now = performance.now() / 1000;
+      ctx2d.lineWidth = 2.5;
+      ctx2d.lineCap = 'round';
+      ctx2d.lineJoin = 'round';
+      let prev: { x: number; y: number; s: number } | null = null;
+      for (const p of trace) {
+        const x = left + ((p.t - (now - WINDOW_SEC)) / WINDOW_SEC) * (w - left);
+        if (p.s == null || p.s < MIN_SEMI - 1 || p.s > MAX_SEMI + 1) {
+          prev = null;
+          continue;
+        }
+        const y = yFor(p.s, h);
+        if (prev) {
+          const off = Math.abs(p.s - Math.round(p.s)) * 100;
+          ctx2d.strokeStyle = off <= IN_TUNE ? colors.good : colors.accent;
+          ctx2d.beginPath();
+          ctx2d.moveTo(prev.x, prev.y);
+          ctx2d.lineTo(x, y);
+          ctx2d.stroke();
+        }
+        prev = { x, y, s: p.s };
+      }
+      if (prev) {
+        ctx2d.fillStyle = colors.accent;
+        ctx2d.beginPath();
+        ctx2d.arc(prev.x, prev.y, 4.5, 0, Math.PI * 2);
+        ctx2d.fill();
+      }
+    }
+
+    let frame = 0;
+    function loop() {
+      raf = requestAnimationFrame(loop);
+      if (!analyser) return;
+      frame++;
+      const now = performance.now() / 1000;
+      if (frame % 2 === 0) {
+        analyser.getFloatTimeDomainData(data);
+        const f = detectPitch(data, audio().sampleRate, 90, 2400);
+        let semi: number | null = null;
+        if (f) {
+          recent.push(semisFromSa(f, saHz()));
+          if (recent.length > 3) recent.shift();
+          semi = [...recent].sort((a, b) => a - b)[Math.floor(recent.length / 2)];
+          update(semi, f, now);
+        } else {
+          recent.length = 0;
+          update(null, null, now);
+        }
+        trace.push({ t: now, s: semi });
+        while (trace.length && trace[0].t < now - WINDOW_SEC) trace.shift();
+      }
+      draw();
+    }
+
+    function update(semi: number | null, f: number | null, now: number) {
+      if (semi == null || f == null) {
+        holdNote = null;
+        root.classList.remove('is-voiced', 'is-tuned');
+        return;
+      }
+      const nearest = Math.round(semi);
+      const cents = Math.round((semi - nearest) * 100);
+      const pc = ((nearest % 12) + 12) % 12;
+      swaraOut.textContent = labelForSemis(nearest);
+      hindiOut.textContent = SWARAS[pc].hindi + ' · ' + SWARAS[pc].name;
+      hzOut.textContent = `${f.toFixed(1)} Hz`;
+      needle.style.left = `${50 + Math.max(-50, Math.min(50, cents))}%`;
+      centsOut.textContent = cents === 0 ? '± 0 cents' : `${cents > 0 ? '+' : '−'}${Math.abs(cents)} cents ${cents > 0 ? 'sharp' : 'flat'}`;
+      const inTune = Math.abs(cents) <= IN_TUNE;
+      root.classList.add('is-voiced');
+      root.classList.toggle('is-tuned', inTune);
+
+      voiced++;
+      if (inTune) tuned++;
+      accOut.textContent = `${Math.round((tuned / voiced) * 100)}%`;
+
+      if (inTune && holdNote === nearest) {
+        const held = now - holdStart;
+        holdOut.textContent = `${held.toFixed(1)}s`;
+        if (held > best) {
+          best = held;
+          bestOut.textContent = `${best.toFixed(1)}s`;
+        }
+      } else if (inTune) {
+        holdNote = nearest;
+        holdStart = now;
+      } else {
+        holdNote = null;
+        holdOut.textContent = '0.0s';
+      }
+    }
+
+    async function start() {
+      try {
+        const c = audio();
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        });
+        const src = c.createMediaStreamSource(stream);
+        analyser = c.createAnalyser();
+        analyser.fftSize = 2048;
+        data = new Float32Array(analyser.fftSize);
+        src.connect(analyser);
+        overlay.hidden = true;
+        stopBtn.hidden = false;
+        loop();
+      } catch (err) {
+        overlay.querySelector('p')!.textContent = 'Microphone access was blocked. Allow it in your browser to use the tuner.';
+        console.error(err);
+      }
+    }
+
+    function stop() {
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = null;
+      analyser = null;
+      if (raf != null) cancelAnimationFrame(raf);
+      overlay.hidden = false;
+      stopBtn.hidden = true;
+      root.classList.remove('is-voiced', 'is-tuned');
+    }
+
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+    draw();
+  });
+</script>
+
+<style>
+  .tuner {
+    display: grid;
+    gap: var(--space-5);
+  }
+  .tuner__top {
+    display: grid;
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+    gap: var(--space-6);
+    align-items: center;
+  }
+  @media (max-width: 640px) {
+    .tuner__top {
+      grid-template-columns: 1fr;
+    }
+  }
+  .tuner__readout {
+    text-align: center;
+  }
+  .tuner__swara {
+    font-family: var(--font-display);
+    font-size: clamp(3rem, 2rem + 4vw, 5rem);
+    line-height: 1;
+    color: var(--color-text-subtle);
+    transition: color var(--duration-base);
+  }
+  .tuner.is-voiced .tuner__swara {
+    color: var(--color-accent);
+  }
+  .tuner.is-tuned .tuner__swara {
+    color: var(--color-bamboo);
+    text-shadow: 0 0 24px var(--color-bamboo-soft);
+  }
+  .tuner__hindi {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+  .tuner__hz {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-text-subtle);
+  }
+  .tuner__meter {
+    position: relative;
+    height: 3.25rem;
+    border-radius: var(--radius-md);
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+  }
+  .tuner__zone {
+    position: absolute;
+    inset: 0 calc(50% - 15%);
+    background: var(--color-bamboo-soft);
+    border-inline: 1px solid color-mix(in oklab, var(--color-bamboo) 40%, transparent);
+  }
+  .tuner__ticks span {
+    position: absolute;
+    bottom: 4px;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--color-text-subtle);
+    font-family: var(--font-mono);
+  }
+  .tuner__ticks span:first-child {
+    transform: translateX(2px);
+  }
+  .tuner__ticks span:last-child {
+    transform: translateX(calc(-100% - 2px));
+  }
+  .tuner__needle {
+    position: absolute;
+    top: 6px;
+    bottom: 20px;
+    left: 50%;
+    width: 3px;
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--color-text-subtle);
+    transition: left 90ms linear, background var(--duration-base);
+  }
+  .tuner.is-voiced .tuner__needle {
+    background: var(--color-accent);
+  }
+  .tuner.is-tuned .tuner__needle {
+    background: var(--color-bamboo);
+    box-shadow: 0 0 12px var(--color-bamboo);
+  }
+  .tuner__cents {
+    margin-top: var(--space-2);
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .tuner__stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: var(--space-4);
+    text-align: center;
+  }
+  .tuner__stats > div {
+    display: grid;
+    font-size: var(--text-xs);
+    color: var(--color-text-subtle);
+  }
+  .tuner__stat {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+  .tuner__trace {
+    position: relative;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    overflow: hidden;
+  }
+  .tuner__trace canvas {
+    width: 100%;
+    height: 340px;
+  }
+  .tuner__overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: var(--space-3);
+    background: color-mix(in oklab, var(--color-bg-elevated) 70%, transparent);
+    backdrop-filter: blur(2px);
+    text-align: center;
+    padding: var(--space-4);
+    font-size: var(--text-sm);
+  }
+  .tuner__overlay[hidden] {
+    display: none;
+  }
+  .tuner__foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+  }
+</style>

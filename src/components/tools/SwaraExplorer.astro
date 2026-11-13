@@ -1,0 +1,261 @@
+---
+import ToolCard from '../ui/ToolCard.astro';
+import Segmented from '../ui/Segmented.astro';
+import SaPicker from '../ui/SaPicker.astro';
+import { FINGERINGS, fingeringFor } from '../../lib/fingering';
+import { SWARAS, labelForSemis } from '../../lib/swara';
+import { bansuriSvg } from '../../lib/bansuri-svg';
+
+interface Props {
+  /** initial selected swara, semitones from Sa */
+  start?: number;
+  embedded?: boolean;
+}
+const { start = 0, embedded = false } = Astro.props;
+const init = fingeringFor(start) ?? FINGERINGS[5];
+---
+
+<ToolCard
+  title="Swara Explorer"
+  hindi="स्वर"
+  icon="keys"
+  href="/tools/swaras"
+  description={embedded ? undefined : 'Tap a swara to hear it and see the bansuri fingering. Komal notes sit on the raised keys.'}
+>
+  <div class="swx" data-tool="swara-explorer" data-start={init.semis}>
+    <div class="swx__flute" data-ref="flute" set:html={bansuriSvg(init.holes, { uid: 'swx' })} />
+
+    <div class="swx__info">
+      <div>
+        <span class="swx__name" data-ref="name">{labelForSemis(init.semis)}</span>
+        <span class="swx__hindi" data-ref="hindi" lang="hi">{SWARAS[((init.semis % 12) + 12) % 12].hindi}</span>
+      </div>
+      <div class="cluster">
+        <span class="chip" data-ref="full">{SWARAS[((init.semis % 12) + 12) % 12].name}</span>
+        <span class="chip" data-ref="hz">—</span>
+        <span class="chip chip--bamboo" data-ref="breath">{init.breath} breath</span>
+      </div>
+      <p class="swx__note muted" data-ref="tip">{init.note ?? ''}</p>
+    </div>
+
+    <div class="swx__keys" data-ref="keys" role="group" aria-label="Swaras">
+      {
+        FINGERINGS.map((f) => {
+          const sw = SWARAS[((f.semis % 12) + 12) % 12];
+          const raised = sw.variant === 'komal' || sw.variant === 'tivra';
+          return (
+            <button
+              type="button"
+              class:list={['swx__key', raised && 'swx__key--raised', f.semis % 12 === 0 && 'swx__key--sa']}
+              data-semis={f.semis}
+              aria-pressed={f.semis === init.semis ? 'true' : 'false'}
+              title={sw.name}
+            >
+              <span class="swx__key-label">{labelForSemis(f.semis)}</span>
+              <span class="swx__key-west" data-west />
+            </button>
+          );
+        })
+      }
+    </div>
+
+    <div class="swx__foot">
+      <SaPicker compact />
+      <Segmented
+        ref="labels"
+        label="Key labels"
+        value="sargam"
+        options={[
+          { value: 'sargam', label: 'Sargam' },
+          { value: 'hindi', label: 'हिंदी' },
+          { value: 'western', label: 'Western' },
+        ]}
+      />
+    </div>
+  </div>
+</ToolCard>
+
+<script>
+  import { mountAll, ref, bindSegmented } from '../../lib/dom';
+  import { fingeringFor } from '../../lib/fingering';
+  import { SWARAS, WESTERN_NOTES, labelForSemis, swaraHz } from '../../lib/swara';
+  import { bansuriSvg } from '../../lib/bansuri-svg';
+  import { saHz, getSettings, onSettings } from '../../lib/settings';
+  import { fluteNote } from '../../lib/audio/voices';
+  import { audio } from '../../lib/audio/engine';
+
+  let uidCounter = 0;
+
+  mountAll('swara-explorer', (root) => {
+    const uid = `swx${uidCounter++}`;
+    const flute = ref(root, 'flute');
+    const keys = Array.from(root.querySelectorAll<HTMLButtonElement>('.swx__key'));
+    let selected = Number(root.dataset.start);
+    let labelMode = 'sargam';
+
+    const western = (semis: number) => {
+      const s = getSettings();
+      const idx = WESTERN_NOTES.indexOf(s.saNote) + semis;
+      const pc = ((idx % 12) + 12) % 12;
+      const oct = s.saOctave + Math.floor(idx / 12);
+      return `${WESTERN_NOTES[pc]}${oct}`;
+    };
+
+    function show(semis: number) {
+      const f = fingeringFor(semis);
+      if (!f) return;
+      selected = semis;
+      const sw = SWARAS[((semis % 12) + 12) % 12];
+      flute.innerHTML = bansuriSvg(f.holes, { uid });
+      ref(root, 'name').textContent = labelForSemis(semis);
+      ref(root, 'hindi').textContent = sw.hindi;
+      ref(root, 'full').textContent = `${sw.name} · ${semis < 0 ? 'mandra' : semis >= 12 ? 'taar' : 'madhya'} saptak`;
+      ref(root, 'hz').textContent = `${western(semis)} · ${swaraHz(saHz(), semis).toFixed(1)} Hz`;
+      ref(root, 'breath').textContent = `${f.breath} breath`;
+      ref(root, 'tip').textContent = f.note ?? '';
+      keys.forEach((k) => k.setAttribute('aria-pressed', String(Number(k.dataset.semis) === semis)));
+    }
+
+    function paintLabels() {
+      keys.forEach((k) => {
+        const s = Number(k.dataset.semis);
+        const label = k.querySelector('.swx__key-label')!;
+        const west = k.querySelector('[data-west]')!;
+        label.textContent =
+          labelMode === 'hindi' ? labelForSemis(s, 'hindi') : labelMode === 'western' ? western(s) : labelForSemis(s);
+        west.textContent = labelMode === 'western' ? labelForSemis(s) : western(s);
+      });
+    }
+
+    keys.forEach((k) =>
+      k.addEventListener('click', () => {
+        const s = Number(k.dataset.semis);
+        show(s);
+        const c = audio();
+        fluteNote(swaraHz(saHz(), s), c.currentTime + 0.02, 1.1);
+      }),
+    );
+
+    // Computer keyboard: a s d f g h j k = Sa..Sa' (shuddh), w e t y u = komal/tivra
+    const KEYMAP: Record<string, number> = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, y: 8, h: 9, u: 10, j: 11, k: 12 };
+    root.addEventListener('keydown', (e) => {
+      const s = KEYMAP[e.key.toLowerCase()];
+      if (s == null || e.metaKey || e.ctrlKey) return;
+      keys.find((k) => Number(k.dataset.semis) === s)?.click();
+    });
+
+    bindSegmented(root, 'labels', (v) => {
+      labelMode = v;
+      paintLabels();
+    });
+
+    onSettings(() => {
+      paintLabels();
+      show(selected);
+    });
+    paintLabels();
+    show(selected);
+  });
+</script>
+
+<style>
+  .swx {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: var(--space-5) var(--space-6);
+    align-items: center;
+  }
+  @media (max-width: 680px) {
+    .swx {
+      grid-template-columns: 1fr;
+    }
+  }
+  .swx__flute {
+    padding: var(--space-3) 0;
+  }
+  .swx__info {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .swx__name {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    line-height: 1;
+    color: var(--color-accent);
+  }
+  .swx__hindi {
+    margin-left: var(--space-2);
+    font-size: var(--text-2xl);
+    color: var(--color-text-muted);
+  }
+  .swx__note {
+    font-size: var(--text-sm);
+    min-height: 1.4em;
+  }
+  .swx__keys {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(18, minmax(0, 1fr));
+    gap: 4px;
+    align-items: end;
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+  }
+  @media (max-width: 680px) {
+    .swx__keys {
+      grid-template-columns: repeat(9, minmax(0, 1fr));
+    }
+  }
+  .swx__key {
+    display: grid;
+    align-content: end;
+    justify-items: center;
+    gap: 2px;
+    height: 6.5rem;
+    padding: var(--space-2) 0;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: linear-gradient(to bottom, var(--color-surface-3), var(--color-surface-2));
+    color: var(--color-text);
+    cursor: pointer;
+    transition: transform var(--duration-fast) var(--ease-out), background var(--duration-fast);
+  }
+  .swx__key--raised {
+    height: 4.75rem;
+    align-self: start;
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+  }
+  .swx__key--sa {
+    border-color: var(--color-sam);
+  }
+  .swx__key:hover {
+    transform: translateY(2px);
+  }
+  .swx__key[aria-pressed='true'] {
+    background: var(--color-accent);
+    color: var(--color-accent-contrast);
+    border-color: var(--color-accent);
+    box-shadow: var(--glow-accent);
+  }
+  .swx__key-label {
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+  .swx__key-west {
+    font-size: 9px;
+    opacity: 0.7;
+    font-family: var(--font-mono);
+  }
+  .swx__foot {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+  }
+</style>

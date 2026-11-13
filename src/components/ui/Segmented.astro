@@ -1,0 +1,20 @@
+---
+/** Segmented button group. Emits nothing itself — tool scripts listen to clicks on `[data-value]`. */
+interface Props {
+  ref: string;
+  label: string;
+  options: { value: string | number; label: string; title?: string }[];
+  value?: string | number;
+}
+const { ref, label, options, value } = Astro.props;
+---
+
+<div class="segmented" role="group" aria-label={label} data-ref={ref}>
+  {
+    options.map((o) => (
+      <button type="button" data-value={o.value} title={o.title} aria-pressed={String(o.value) === String(value) ? 'true' : 'false'}>
+        {o.label}
+      </button>
+    ))
+  }
+</div>

@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PageHeader from '../components/ui/PageHeader.astro';
+import Tanpura from '../components/tools/Tanpura.astro';
+import TaalPlayer from '../components/tools/TaalPlayer.astro';
+import Tuner from '../components/tools/Tuner.astro';
+import RiyazLog from '../components/tools/RiyazLog.astro';
+---
+
+<BaseLayout title="Practice room" description="Tanpura, tabla, tuner and a practice timer together on one page.">
+  <div class="container">
+    <PageHeader
+      eyebrow="Practice room"
+      title="Riyaz, all in one place"
+      lead="Start the tanpura, add the tabla when you're ready for rhythm, and keep the tuner open to watch your sur. Everything layers together."
+    />
+    <div class="room">
+      <RiyazLog />
+      <div class="room__pair">
+        <Tanpura embedded />
+        <Tuner embedded />
+      </div>
+      <TaalPlayer embedded />
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .room {
+    display: grid;
+    gap: var(--space-6);
+  }
+  .room__pair {
+    display: grid;
+    gap: var(--space-6);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+    align-items: start;
+  }
+</style>

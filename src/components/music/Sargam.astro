@@ -1,0 +1,130 @@
+---
+/**
+ * Inline, playable sargam phrase for lessons:
+ *   <Sargam notes="S R G - m G R S" bpm={90} label="Aaroh" />
+ * Notes are rendered at build time (readable without JS) and highlighted
+ * while playing.
+ */
+import Icon from '../ui/Icon.astro';
+import { parseSargam, labelForSemis } from '../../lib/swara';
+
+interface Props {
+  notes: string;
+  bpm?: number;
+  label?: string;
+}
+const { notes, bpm = 90, label } = Astro.props;
+const parsed = parseSargam(notes);
+---
+
+<div class="sargam" data-tool="sargam" data-notes={notes} data-bpm={bpm}>
+  <button type="button" class="btn btn--ghost sargam__play" aria-pressed="false" aria-label={`Play ${label ?? 'phrase'}`}>
+    <Icon name="play" class="sargam__icon-play" size={16} />
+    <Icon name="stop" class="sargam__icon-stop" size={14} />
+  </button>
+  {label && <span class="sargam__label">{label}</span>}
+  <span class="sargam__notes">
+    {
+      parsed.map((n) => (
+        <span class:list={['sargam__note', n.semis == null && 'sargam__note--rest']} style={n.beats > 1 ? `--beats:${n.beats}` : undefined}>
+          {n.semis == null ? '·' : labelForSemis(n.semis)}
+          {n.beats > 1 && <span class="sargam__hold" aria-hidden="true">{'–'.repeat(n.beats - 1)}</span>}
+        </span>
+      ))
+    }
+  </span>
+</div>
+
+<script>
+  import { mountAll } from '../../lib/dom';
+  import { parseSargam } from '../../lib/swara';
+  import { playSequence } from '../../lib/sequence';
+
+  mountAll('sargam', (root) => {
+    const btn = root.querySelector<HTMLButtonElement>('.sargam__play')!;
+    const els = Array.from(root.querySelectorAll<HTMLElement>('.sargam__note'));
+    const notes = parseSargam(root.dataset.notes!);
+    const bpm = Number(root.dataset.bpm);
+    let handle: { stop(): void } | null = null;
+
+    const reset = () => {
+      handle = null;
+      btn.setAttribute('aria-pressed', 'false');
+      els.forEach((e) => e.classList.remove('is-on'));
+    };
+    btn.addEventListener('click', () => {
+      if (handle) {
+        handle.stop();
+        return reset();
+      }
+      btn.setAttribute('aria-pressed', 'true');
+      handle = playSequence(notes, {
+        bpm: () => bpm,
+        onNote: (i) => els.forEach((e, k) => e.classList.toggle('is-on', k === i)),
+        onEnd: reset,
+      });
+    });
+  });
+</script>
+
+<style>
+  .sargam {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+  .sargam__play {
+    width: 2.25rem;
+    height: 2.25rem;
+    min-height: 0;
+    padding: 0;
+    flex: none;
+  }
+  .sargam__play :global(.sargam__icon-stop),
+  .sargam__play[aria-pressed='true'] :global(.sargam__icon-play) {
+    display: none;
+  }
+  .sargam__play[aria-pressed='true'] :global(.sargam__icon-stop) {
+    display: block;
+  }
+  .sargam__label {
+    font-size: var(--text-xs);
+    font-weight: var(--weight-semibold);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+    min-width: 4.5rem;
+  }
+  .sargam__notes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    flex: 1;
+  }
+  .sargam__note {
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-display);
+    font-size: var(--text-md);
+    transition: background var(--duration-fast), color var(--duration-fast);
+  }
+  .sargam__note--rest {
+    color: var(--color-text-subtle);
+  }
+  .sargam__hold {
+    margin-left: 0.2em;
+    color: var(--color-text-subtle);
+  }
+  .sargam__note.is-on {
+    background: var(--color-accent);
+    color: var(--color-accent-contrast);
+  }
+  .sargam__note.is-on .sargam__hold {
+    color: inherit;
+  }
+</style>

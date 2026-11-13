@@ -1,0 +1,100 @@
+---
+/** Summary card for a raag with playable aaroh, avroh and pakad. */
+import Sargam from './Sargam.astro';
+
+interface Props {
+  name: string;
+  hindi?: string;
+  thaat?: string;
+  time?: string;
+  vadi?: string;
+  samvadi?: string;
+  mood?: string;
+  aaroh: string;
+  avroh: string;
+  pakad?: string;
+  bpm?: number;
+}
+const { name, hindi, thaat, time, vadi, samvadi, mood, aaroh, avroh, pakad, bpm = 100 } = Astro.props;
+const facts = [
+  ['Thaat', thaat],
+  ['Time', time],
+  ['Vadi', vadi],
+  ['Samvadi', samvadi],
+].filter(([, v]) => v);
+---
+
+<article class="raag">
+  <header class="raag__head">
+    <p class="eyebrow">Raag</p>
+    <h3 class="raag__name">
+      {name}
+      {hindi && <span lang="hi">{hindi}</span>}
+    </h3>
+    {mood && <p class="raag__mood muted">{mood}</p>}
+  </header>
+  {
+    facts.length > 0 && (
+      <dl class="raag__facts">
+        {facts.map(([k, v]) => (
+          <div>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }
+  <div class="raag__phrases">
+    <Sargam label="Aaroh" notes={aaroh} bpm={bpm} />
+    <Sargam label="Avroh" notes={avroh} bpm={bpm} />
+    {pakad && <Sargam label="Pakad" notes={pakad} bpm={bpm * 0.8} />}
+  </div>
+</article>
+
+<style>
+  .raag {
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-6);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-border);
+    background:
+      radial-gradient(100% 100% at 100% 0%, var(--color-khali-soft), transparent 60%),
+      var(--color-bg-elevated);
+  }
+  .raag__name {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    font-size: var(--text-3xl);
+  }
+  .raag__name span {
+    font-size: var(--text-xl);
+    color: var(--color-text-muted);
+  }
+  .raag__mood {
+    margin-top: var(--space-1);
+    font-size: var(--text-md);
+  }
+  .raag__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-6);
+  }
+  .raag__facts dt {
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-wide);
+    text-transform: uppercase;
+    color: var(--color-text-subtle);
+  }
+  .raag__facts dd {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+  }
+  .raag__phrases {
+    display: grid;
+    gap: var(--space-2);
+  }
+</style>

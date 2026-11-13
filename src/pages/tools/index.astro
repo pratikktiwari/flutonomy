@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PageHeader from '../../components/ui/PageHeader.astro';
+import ToolTile from '../../components/ui/ToolTile.astro';
+import { TOOLS } from '../../lib/tools';
+---
+
+<BaseLayout title="Tools">
+  <div class="container">
+    <PageHeader
+      eyebrow="Practice tools"
+      title="Everything you need beside you while you play"
+      lead="Each tool follows the Sa you set at the top of the page, so the tanpura, tabla, tuner and swaras are always in your flute's key."
+    />
+    <div class="grid-auto" style="--grid-min: 19rem">
+      {TOOLS.map((t) => <ToolTile {...t} />)}
+    </div>
+  </div>
+</BaseLayout>

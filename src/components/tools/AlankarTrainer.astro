@@ -1,0 +1,276 @@
+---
+import ToolCard from '../ui/ToolCard.astro';
+import PlayButton from '../ui/PlayButton.astro';
+import RangeField from '../ui/RangeField.astro';
+import Segmented from '../ui/Segmented.astro';
+import { SCALES } from '../../lib/swara';
+
+interface Props {
+  scale?: keyof typeof SCALES;
+  pattern?: 'aaroh-avroh' | 'pairs' | 'threes' | 'fours' | 'zigzag';
+  bpm?: number;
+  embedded?: boolean;
+}
+const { scale = 'bilawal', pattern = 'threes', bpm = 72, embedded = false } = Astro.props;
+---
+
+<ToolCard
+  title="Alankar Trainer"
+  hindi="अलंकार"
+  icon="loop"
+  href="/tools/alankar"
+  description={embedded ? undefined : 'Generate practice patterns in any scale. Echo mode leaves a gap for you to play it back.'}
+>
+  <div class="alk" data-tool="alankar" data-scale={scale} data-pattern={pattern} data-bpm={bpm}>
+    <div class="alk__controls">
+      <label class="field">
+        <span class="field__label">Scale</span>
+        <select class="select" data-ref="scale">
+          {Object.entries(SCALES).map(([id, s]) => <option value={id} selected={id === scale}>{s.label}</option>)}
+        </select>
+      </label>
+      <div class="field">
+        <span class="field__label">Pattern</span>
+        <Segmented
+          ref="pattern"
+          label="Pattern"
+          value={pattern}
+          options={[
+            { value: 'aaroh-avroh', label: 'Up & down' },
+            { value: 'pairs', label: 'SR RG' },
+            { value: 'threes', label: 'SRG RGm' },
+            { value: 'fours', label: 'SRGm' },
+            { value: 'zigzag', label: 'SG RM' },
+          ]}
+        />
+      </div>
+      <RangeField label="Tempo" ref="tempo" min={40} max={200} value={bpm} unit=" bpm" />
+      <div class="cluster">
+        <PlayButton label="Play pattern" />
+        <button type="button" class="btn" data-ref="echo" aria-pressed="false" title="Leave a gap after each group for you to play it back">
+          Echo mode
+        </button>
+        <button type="button" class="btn btn--ghost" data-ref="loop" aria-pressed="true">Loop</button>
+      </div>
+    </div>
+
+    <div class="alk__view">
+      <div class="alk__now">
+        <span class="alk__now-note" data-ref="now">Sa</span>
+        <span class="alk__now-label muted" data-ref="phase">ready</span>
+      </div>
+      <div class="alk__flute" data-ref="flute"></div>
+      <div class="alk__seq" data-ref="seq" aria-label="Pattern notes"></div>
+    </div>
+  </div>
+</ToolCard>
+
+<script>
+  import { mountAll, ref, bindRange, bindSegmented, setPressed } from '../../lib/dom';
+  import { SCALES, parseSargam, labelForSemis, type ParsedNote } from '../../lib/swara';
+  import { alankar, playSequence } from '../../lib/sequence';
+  import { fingeringFor } from '../../lib/fingering';
+  import { bansuriSvg } from '../../lib/bansuri-svg';
+
+  let n = 0;
+  mountAll('alankar', (root) => {
+    const uid = `alk${n++}`;
+    let scale = root.dataset.scale!;
+    let pattern = root.dataset.pattern!;
+    let bpm = Number(root.dataset.bpm);
+    let echo = false;
+    let loop = true;
+
+    const seqEl = ref(root, 'seq');
+    const nowEl = ref(root, 'now');
+    const phaseEl = ref(root, 'phase');
+    const flute = ref(root, 'flute');
+    const playBtn = ref(root, 'play');
+    const echoBtn = ref(root, 'echo');
+    const loopBtn = ref(root, 'loop');
+
+    let notes: ParsedNote[] = [];
+    let chips: HTMLElement[] = [];
+    let playing: { stop(): void } | null = null;
+
+    function build() {
+      const groups = alankar(SCALES[scale].notes, pattern);
+      const tokens: string[] = [];
+      groups.forEach((g) => {
+        tokens.push(...g);
+        if (echo) tokens.push(...g.map(() => ','));
+        tokens.push('|');
+      });
+      notes = parseSargam(tokens.join(' ').replace(/\|/g, ' '));
+      // render: keep group boundaries visually
+      seqEl.innerHTML = '';
+      chips = [];
+      let i = 0;
+      groups.forEach((g) => {
+        const group = document.createElement('span');
+        group.className = 'alk__group';
+        const len = g.length * (echo ? 2 : 1);
+        for (let k = 0; k < len; k++, i++) {
+          const nn = notes[i];
+          const chip = document.createElement('span');
+          chip.className = 'alk__chip' + (nn.semis == null ? ' alk__chip--rest' : '');
+          chip.textContent = nn.semis == null ? '·' : labelForSemis(nn.semis);
+          group.append(chip);
+          chips.push(chip);
+        }
+        seqEl.append(group);
+      });
+      showFingering(0);
+    }
+
+    function showFingering(semis: number) {
+      const f = fingeringFor(semis);
+      if (f) flute.innerHTML = bansuriSvg(f.holes, { uid });
+    }
+
+    function onNote(i: number) {
+      chips.forEach((c, k) => c.classList.toggle('is-on', k === i));
+      const nn = notes[i];
+      if (nn.semis == null) {
+        phaseEl.textContent = 'your turn';
+        root.classList.add('is-echo');
+      } else {
+        root.classList.remove('is-echo');
+        nowEl.textContent = labelForSemis(nn.semis);
+        phaseEl.textContent = echo ? 'listen' : 'play along';
+        showFingering(nn.semis);
+      }
+      chips[i]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    }
+
+    function stop() {
+      playing?.stop();
+      playing = null;
+      setPressed(playBtn, false);
+      chips.forEach((c) => c.classList.remove('is-on'));
+      root.classList.remove('is-echo');
+      phaseEl.textContent = 'ready';
+    }
+    function start() {
+      playing = playSequence(notes, {
+        bpm: () => bpm,
+        loop: () => loop,
+        pulse: () => true,
+        onNote,
+        onEnd: stop,
+      });
+      setPressed(playBtn, true);
+    }
+    const restart = () => {
+      const was = !!playing;
+      if (was) stop();
+      build();
+      if (was) start();
+    };
+
+    playBtn.addEventListener('click', () => (playing ? stop() : start()));
+    ref<HTMLSelectElement>(root, 'scale').addEventListener('change', (e) => {
+      scale = (e.target as HTMLSelectElement).value;
+      restart();
+    });
+    bindSegmented(root, 'pattern', (v) => {
+      pattern = v;
+      restart();
+    });
+    bindRange(root, 'tempo', (v) => (bpm = v));
+    echoBtn.addEventListener('click', () => {
+      echo = !echo;
+      setPressed(echoBtn, echo);
+      restart();
+    });
+    loopBtn.addEventListener('click', () => {
+      loop = !loop;
+      setPressed(loopBtn, loop);
+    });
+
+    build();
+  });
+</script>
+
+<style>
+  .alk {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: var(--space-6);
+  }
+  @media (max-width: 760px) {
+    .alk {
+      grid-template-columns: 1fr;
+    }
+  }
+  .alk__controls {
+    display: grid;
+    gap: var(--space-4);
+    align-content: start;
+  }
+  .alk__view {
+    display: grid;
+    gap: var(--space-4);
+    align-content: start;
+  }
+  .alk__now {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .alk__now-note {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    line-height: 1;
+    color: var(--color-accent);
+    transition: color var(--duration-fast);
+  }
+  .alk.is-echo .alk__now-note {
+    color: var(--color-bamboo);
+  }
+  .alk__now-label {
+    font-size: var(--text-sm);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-wide);
+  }
+  .alk.is-echo .alk__now-label {
+    color: var(--color-bamboo);
+  }
+  .alk__seq {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
+    max-height: 11rem;
+    overflow-y: auto;
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+  }
+  .alk :global(.alk__group) {
+    display: inline-flex;
+    gap: 2px;
+  }
+  .alk :global(.alk__chip) {
+    min-width: 2.1rem;
+    padding: 0.15rem 0.35rem;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-2);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    text-align: center;
+    transition: background var(--duration-fast), color var(--duration-fast);
+  }
+  .alk :global(.alk__chip--rest) {
+    background: transparent;
+    color: var(--color-text-subtle);
+  }
+  .alk :global(.alk__chip.is-on) {
+    background: var(--color-accent);
+    color: var(--color-accent-contrast);
+  }
+  .alk :global(.alk__chip--rest.is-on) {
+    background: var(--color-bamboo-soft);
+    color: var(--color-bamboo);
+  }
+</style>

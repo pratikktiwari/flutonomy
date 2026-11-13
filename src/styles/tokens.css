@@ -1,0 +1,185 @@
+/*
+ * Flutonomy design tokens
+ * ------------------------------------------------------------------
+ * Every colour, size, radius and timing used in the app lives here.
+ * Components only ever reference these variables, so retheming means
+ * editing this one file.
+ *
+ * Palette idea: "raag at dusk" — deep ink-indigo night, a saffron diya
+ * glow as the primary accent, bamboo green for the bansuri itself and
+ * kumkum red reserved for "sam" (the first beat) and strong emphasis.
+ */
+
+:root {
+  /* ---------- Raw palette ---------- */
+  --ink-950: #0c0a14;
+  --ink-900: #13101e;
+  --ink-850: #191526;
+  --ink-800: #201b30;
+  --ink-700: #2d2742;
+  --ink-600: #3d3657;
+  --ink-500: #5a5277;
+
+  --parchment-50: #fbf6ec;
+  --parchment-100: #f3ead8;
+  --parchment-200: #e6d9bf;
+  --parchment-300: #cdbd9e;
+  --parchment-400: #a99a7e;
+
+  --saffron-300: #f6c879;
+  --saffron-400: #f0b04f;
+  --saffron-500: #e3962a;
+  --saffron-600: #b8731a;
+
+  --bamboo-300: #c3d6a6;
+  --bamboo-400: #a3bf83;
+  --bamboo-500: #7f9f62;
+  --bamboo-700: #4c6438;
+
+  --kumkum-400: #ec7c72;
+  --kumkum-500: #d65a50;
+  --kumkum-700: #8f3029;
+
+  --lotus-400: #b79be8;
+  --lotus-500: #9479d1;
+
+  /* ---------- Semantic colours (dark is default) ---------- */
+  --color-bg: var(--ink-950);
+  --color-bg-elevated: var(--ink-900);
+  --color-surface: var(--ink-850);
+  --color-surface-2: var(--ink-800);
+  --color-surface-3: var(--ink-700);
+  --color-border: color-mix(in oklab, var(--parchment-100) 10%, transparent);
+  --color-border-strong: color-mix(in oklab, var(--parchment-100) 20%, transparent);
+
+  --color-text: var(--parchment-100);
+  --color-text-muted: var(--parchment-300);
+  --color-text-subtle: var(--parchment-400);
+  --color-text-inverse: var(--ink-950);
+
+  --color-accent: var(--saffron-400);
+  --color-accent-strong: var(--saffron-300);
+  --color-accent-soft: color-mix(in oklab, var(--saffron-400) 16%, transparent);
+  --color-accent-contrast: var(--ink-950);
+
+  --color-bamboo: var(--bamboo-400);
+  --color-bamboo-soft: color-mix(in oklab, var(--bamboo-400) 16%, transparent);
+  --color-sam: var(--kumkum-500);
+  --color-sam-soft: color-mix(in oklab, var(--kumkum-500) 20%, transparent);
+  --color-khali: var(--lotus-400);
+  --color-khali-soft: color-mix(in oklab, var(--lotus-400) 18%, transparent);
+
+  --color-success: var(--bamboo-400);
+  --color-warning: var(--saffron-400);
+  --color-danger: var(--kumkum-400);
+
+  --glow-accent: 0 0 0 1px color-mix(in oklab, var(--saffron-400) 40%, transparent),
+    0 0 28px -4px color-mix(in oklab, var(--saffron-400) 55%, transparent);
+
+  /* ---------- Typography ---------- */
+  --font-display: 'Fraunces Variable', 'Iowan Old Style', Georgia, serif;
+  --font-body: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: clamp(2rem, 1.4rem + 2.2vw, 2.75rem);
+  --text-4xl: clamp(2.5rem, 1.6rem + 3.6vw, 4.25rem);
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.65;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --tracking-wide: 0.08em;
+
+  /* ---------- Spacing (4px base) ---------- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ---------- Shape ---------- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.25);
+  --shadow-md: 0 8px 24px -8px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 24px 60px -20px rgb(0 0 0 / 0.6);
+
+  /* ---------- Layout ---------- */
+  --container-max: 72rem;
+  --prose-max: 44rem;
+  --header-height: 4rem;
+
+  /* ---------- Motion ---------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 480ms;
+
+  /* ---------- Focus ---------- */
+  --focus-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent);
+
+  color-scheme: dark;
+}
+
+/* Light theme: "morning riyaz" — warm paper, same accents, deeper. */
+:root[data-theme='light'] {
+  --color-bg: var(--parchment-50);
+  --color-bg-elevated: #ffffff;
+  --color-surface: #fffdf8;
+  --color-surface-2: var(--parchment-100);
+  --color-surface-3: var(--parchment-200);
+  --color-border: color-mix(in oklab, var(--ink-900) 10%, transparent);
+  --color-border-strong: color-mix(in oklab, var(--ink-900) 22%, transparent);
+
+  --color-text: var(--ink-900);
+  --color-text-muted: var(--ink-600);
+  --color-text-subtle: var(--ink-500);
+  --color-text-inverse: var(--parchment-50);
+
+  --color-accent: var(--saffron-600);
+  --color-accent-strong: #8f560f;
+  --color-accent-soft: color-mix(in oklab, var(--saffron-500) 16%, transparent);
+  --color-accent-contrast: #ffffff;
+
+  --color-bamboo: var(--bamboo-700);
+  --color-bamboo-soft: color-mix(in oklab, var(--bamboo-500) 18%, transparent);
+  --color-sam: var(--kumkum-700);
+  --color-khali: var(--lotus-500);
+
+  --glow-accent: 0 0 0 1px color-mix(in oklab, var(--saffron-600) 40%, transparent),
+    0 6px 20px -6px color-mix(in oklab, var(--saffron-500) 50%, transparent);
+
+  --shadow-md: 0 8px 24px -10px rgb(60 40 10 / 0.18);
+  --shadow-lg: 0 24px 60px -24px rgb(60 40 10 / 0.25);
+
+  color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+}

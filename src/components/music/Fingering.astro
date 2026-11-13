@@ -1,0 +1,64 @@
+---
+/**
+ * Static bansuri fingering for lessons: <Fingering swara="R" /> or a row
+ * of several: <Fingering swara="S R G" />. Uses ASCII sargam.
+ */
+import { parseSargam, labelForSemis, SWARAS } from '../../lib/swara';
+import { fingeringFor } from '../../lib/fingering';
+import { bansuriSvg } from '../../lib/bansuri-svg';
+
+interface Props {
+  swara: string;
+}
+const notes = parseSargam(Astro.props.swara).filter((n) => n.semis != null);
+let i = 0;
+---
+
+<div class="fingering-row">
+  {
+    notes.map((n) => {
+      const f = fingeringFor(n.semis!);
+      const sw = SWARAS[((n.semis! % 12) + 12) % 12];
+      return (
+        <figure class="fingering">
+          {f ? <div set:html={bansuriSvg(f.holes, { uid: `fg${i++}-${Math.random().toString(36).slice(2, 7)}` })} /> : <p class="muted">No fingering</p>}
+          <figcaption>
+            <strong>{labelForSemis(n.semis!)}</strong> <span lang="hi">{sw.hindi}</span>
+            {f && <span class="chip chip--bamboo">{f.breath} breath</span>}
+          </figcaption>
+        </figure>
+      );
+    })
+  }
+</div>
+
+<style>
+  .fingering-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+    gap: var(--space-4);
+    margin-block: var(--space-6);
+  }
+  .fingering {
+    margin: 0;
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+  .fingering figcaption {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    font-size: var(--text-md);
+  }
+  .fingering strong {
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    color: var(--color-accent);
+  }
+  .fingering .chip {
+    margin-left: auto;
+  }
+</style>
